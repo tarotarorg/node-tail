@@ -1,5 +1,7 @@
 events= require("events")
-fs =require('fs')
+fs = require('fs')
+path = require('path')
+
 
 environment = process.env['NODE_ENV'] || 'development'
 
@@ -29,12 +31,26 @@ class Tail extends events.EventEmitter
              
     @internalDispatcher.on 'next',=>
       @readBlock()
-    
-    fs.watchFile @filename, (curr, prev) =>
-      if curr.size > prev.size
-        @queue.push({start:prev.size, end:curr.size})  
-        @internalDispatcher.emit("next") if @queue.length is 1
-    
+    if path.existsSync @filename
+      @prev = fs.statSync(@filename)
+    else
+      @prev = new fs.Stats()
+
+#    fs.watchFile @filename, (curr, prev) =>
+#      if curr.size > prev.size
+#        @queue.push({start:prev.size, end:curr.size})  
+#        @internalDispatcher.emit("next") if @queue.length is 1
+    fs.watch @filename, (event, fname) =>
+      if event is 'change'
+        if path.existsSync @filename
+          curr = fs.statSync(@filename)
+          if curr.size > @prev.size
+            @queue.push({start:@prev.size, end:curr.size})  
+            @internalDispatcher.emit("next") if @queue.length is 1
+          @prev = curr
+        else if event is 'rename'
+          @prev.size = 0
+      
   unwatch:->
     fs.unwatchFile @filename
     @queue = []
