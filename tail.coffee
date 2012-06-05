@@ -6,7 +6,9 @@ path = require('path')
 environment = process.env['NODE_ENV'] || 'development'
 
 class Tail extends events.EventEmitter
-
+#
+  watchers = {}
+#
   readBlock:()=>
     if @queue.length >= 1
       block=@queue[0]
@@ -24,23 +26,23 @@ class Tail extends events.EventEmitter
           @buffer = parts.pop()
           @emit("line", chunk) for chunk in parts
 
+#
   constructor:(@filename, @separator='\n') ->    
     @buffer = ''
     @internalDispatcher = new events.EventEmitter()
     @queue = []
-             
+
     @internalDispatcher.on 'next',=>
       @readBlock()
     if path.existsSync @filename
       @prev = fs.statSync(@filename)
+      start
     else
       @prev = new fs.Stats()
 
-#    fs.watchFile @filename, (curr, prev) =>
-#      if curr.size > prev.size
-#        @queue.push({start:prev.size, end:curr.size})  
-#        @internalDispatcher.emit("next") if @queue.length is 1
-    fs.watch @filename, (event, fname) =>
+#
+  start:->
+    @watcher = fs.watch @filename, (event, fname) =>
       if event is 'change'
         if path.existsSync @filename
           curr = fs.statSync(@filename)
@@ -48,11 +50,16 @@ class Tail extends events.EventEmitter
             @queue.push({start:@prev.size, end:curr.size})  
             @internalDispatcher.emit("next") if @queue.length is 1
           @prev = curr
-        else if event is 'rename'
-          @prev.size = 0
-      
-  unwatch:->
-    fs.unwatchFile @filename
+      else if event is 'rename'
+        @prev.size = 0
+      event
+    watchers[@filename] = this
+#
+  unwatch:=>
+    @watcher?.close
     @queue = []
-        
+
+  @unwatchFile:(filename):->
+    watchers[@hilename].unwatch
+
 exports.Tail = Tail
